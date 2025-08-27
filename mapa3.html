@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta http-equiv="content-type" content="text/html; charset=UTF-8" />
+    <title>Mapa de Propriedades</title>
+    <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.3/dist/leaflet.js"></script>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.3/dist/leaflet.css"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/css/bootstrap.min.css"/>
+    <link rel="stylesheet" href="https://netdna.bootstrapcdn.com/bootstrap/3.0.0/css/bootstrap-glyphicons.css"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.2.0/css/all.min.css"/>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.css"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/python-visualization/folium/folium/templates/leaflet.awesome.rotate.min.css"/>
+    
+    <meta name="viewport" content="width=device-width,
+            initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <style>
+        #mapa_principal {
+            position: relative;
+            width: 100.0%;
+            height: 100.0%;
+            left: 0.0%;
+            top: 0.0%;
+        }
+        .leaflet-container { font-size: 1rem; }
+        html, body {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+        }
+        /* Legenda */
+        #legenda i {
+            width: 15px;
+            height: 15px;
+            display: inline-block;
+            margin-right: 6px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Mapa -->
+    <div class="folium-map" id="mapa_principal"></div>
+
+    <!-- Título -->
+    <div class="position-absolute top-0 start-50 translate-middle-x mt-2 p-2 bg-white rounded shadow" style="z-index:1000;">
+        <h1 class="m-0">🌍 Mapa de Propriedades</h1>
+    </div>
+
+    <!-- Barra de busca -->
+    <div class="position-absolute" style="top:70px; right:005px; z-index:1000;">
+        <input id="busca" type="text" class="form-control" placeholder="🔍 Procurar proprietário...">
+    </div>
+
+
+    <!-- Legenda -->
+    <div id="legenda" class="position-absolute bottom-0 start-0 m-3 p-2 bg-white rounded shadow" style="z-index:1000;">
+        <b>Legenda</b><br>
+        <i style="background:green;"></i> Nascentes OK<br>
+        <i style="background:red;"></i> Pegar Nascentes<br>
+        <i style="background:grey;"></i> Outro
+    </div>
+
+</body>
+<script>
+    var mapa_principal = L.map(
+        "mapa_principal",
+        {
+            center: [-20.99, -42.56],
+            crs: L.CRS.EPSG3857,
+            zoom: 14,
+            zoomControl: true,
+            preferCanvas: false,
+        }
+    );
+
+    var openstreetmap = L.tileLayer(
+        "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+        {"attribution": "&copy; <a href='https://www.openstreetmap.org/copyright'>OpenStreetMap</a> contributors"}
+    ).addTo(mapa_principal);
+
+    var google_satellite = L.tileLayer(
+        "https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}",
+        {"attribution": "Google", "subdomains": ["mt0", "mt1", "mt2", "mt3"], "maxZoom": 20}
+    ).addTo(mapa_principal);
+
+    // --- Funções de estilo ---
+    function getColor(feature) {
+        var status = feature.properties.NASCENTES;
+        if (status === 'NASCENTES OK') {
+            return 'green';
+        } else if (status === 'PEGAR NASCENTES') {
+            return 'red';
+        } else {
+            return 'grey';
+        }
+    }
+
+    function style(feature) {
+        return {
+            fillColor: getColor(feature),
+            weight: 2,
+            opacity: 1,
+            color: 'white',
+            dashArray: '3',
+            fillOpacity: 0.7
+        };
+    }
+
+    var geoJsonLayer; // para usar na busca
+
+    // Carrega o GeoJSON
+    fetch('dados.geojson')
+        .then(response => response.json())
+        .then(data => {
+            geoJsonLayer = L.geoJSON(data, {
+                style: style,
+                onEachFeature: function (feature, layer) {
+                    var proprietario = feature.properties.PROPRIETÁRIO;
+                    var areaMetros = feature.properties.Shape_Area;
+                    var statusNascentes = feature.properties.NASCENTES;
+                    var statusDocumento = feature.properties.DOCUMENTO;
+
+                    var areaHectares = (areaMetros / 10000).toFixed(2);
+
+                    var popupContent = `
+                        <div class="p-1">
+                            <h6 class="text-primary"><i class="fa fa-user"></i> ${proprietario}</h6>
+                            <p class="mb-1"><b>Área:</b> ${areaHectares} ha</p>
+                            <p class="mb-1"><span class="badge bg-success">${statusNascentes}</span></p>
+                            <p class="mb-1"><span class="badge bg-info">${statusDocumento}</span></p>
+                        </div>
+                    `;
+                    layer.bindPopup(popupContent);
+                }
+            }).addTo(mapa_principal);
+            
+            if (geoJsonLayer.getBounds().isValid()) {
+                mapa_principal.fitBounds(geoJsonLayer.getBounds());
+            }
+        })
+        .catch(error => {
+            console.error('Erro ao carregar GeoJSON:', error);
+            alert('Não foi possível carregar os dados. Verifique o console (F12).');
+        });
+
+    // --- Busca por proprietário ---
+    document.getElementById("busca").addEventListener("keyup", function(e){
+        var valor = e.target.value.toLowerCase();
+        if (!geoJsonLayer) return;
+
+        geoJsonLayer.eachLayer(function(layer){
+            var nome = layer.feature.properties.PROPRIETÁRIO.toLowerCase();
+            if(nome.includes(valor) && valor.length > 2){ // busca a partir de 3 letras
+                mapa_principal.fitBounds(layer.getBounds());
+                layer.openPopup();
+            }
+        });
+    });
+
+    // Controle camadas
+    var baseLayers = {
+        "OpenStreetMap": openstreetmap,
+        "Google Satellite": google_satellite,
+    };
+    L.control.layers(baseLayers, {}, {"position": "topright"}).addTo(mapa_principal);
+
+</script>
+</html>
